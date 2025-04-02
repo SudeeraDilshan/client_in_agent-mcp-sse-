@@ -1,0 +1,8 @@
+langchain_mcp_adapters
+mcp
+python-dotenv 
+starlette
+uvicorn
+langchain_mcp_adapters
+langchain_google_genai
+langchain
