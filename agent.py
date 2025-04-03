@@ -29,7 +29,7 @@ class Agent:
         self.tools = inbuilt_tools  # Initialize with inbuilt tools
         self.prompt = prompt
         self.mcp_tools = None
-        self.sse_client = None
+        self.mcp_sse_client = None
         self.mcp_server_session = None
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-1.5-pro",
@@ -45,8 +45,8 @@ class Agent:
 
     async def load_tools(self, server_url="http://localhost:8000/sse"):
         # Store the client as instance attribute to prevent garbage collection
-        self.sse_client = sse_client(server_url)
-        streams = await self.sse_client.__aenter__()
+        self.mcp_sse_client = sse_client(server_url)
+        streams = await self.mcp_sse_client.__aenter__()
         self.mcp_server_session = ClientSession(streams[0], streams[1])
         await self.mcp_server_session.__aenter__()
         await self.mcp_server_session.initialize()
@@ -87,8 +87,8 @@ class Agent:
         """Cleanup resources for this instance"""
         if hasattr(self, 'mcp_server_session') and self.mcp_server_session:
             await self.mcp_server_session.__aexit__(None, None, None)
-        if hasattr(self, 'sse_client') and self.sse_client:
-            await self.sse_client.__aexit__(None, None, None)
+        if hasattr(self, 'sse_client') and self.mcp_sse_client:
+            await self.mcp_sse_client.__aexit__(None, None, None)
 
 
 
