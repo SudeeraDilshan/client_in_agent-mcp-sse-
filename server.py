@@ -178,6 +178,5 @@ starlette_app = Starlette(
 
 if __name__ == "__main__":
     import uvicorn
-
     logger.info("Starting server on port 8000")
     uvicorn.run(starlette_app, host="0.0.0.0", port=8000, log_level="debug")
