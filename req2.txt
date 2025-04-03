@@ -1,0 +1,8 @@
+langchain
+langchain-openai
+dialdesk-ai-platform-core @ git+https://github.com/arisodev/dialdesk-ai-platform-core.git@feature/consul_integration
+python-dotenv
+langchain-community
+faiss-cpu
+langdetect
+redis
