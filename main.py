@@ -5,7 +5,7 @@ import traceback
 async def main():
     try:
         # Create and initialize agent with MCP client in one step
-        agent = await Agent.create()
+        agent = await Agent()
         # try:
         await agent.run_interactive()
         # finally:
