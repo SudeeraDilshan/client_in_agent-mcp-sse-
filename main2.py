@@ -1,7 +1,7 @@
 import asyncio
 from dialdeskai.src.agents.config import AgentConfig
 from dialdeskai.src.runtime.runtime import AgentRuntime
-from agent2 import EnhancedConversationalAgent
+from agent import EnhancedConversationalAgent
 
 async def setup_and_run_agent():
     """ Setup and run the agent with MCP client """
