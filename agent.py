@@ -8,6 +8,8 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
 from agent_tools import inbuilt_tools  # Custom inbuilt tools
+# from rag_tool import rag_tool
+from rag2 import rag_tool  # Custom RAG tool
 
 # Load environment variables
 load_dotenv()
@@ -26,7 +28,7 @@ prompt = ChatPromptTemplate.from_messages(
 
 class Agent:
     def __init__(self, api_key=GOOGLE_API_KEY):
-        self.tools = inbuilt_tools  # Initialize with inbuilt tools
+        self.tools = inbuilt_tools + rag_tool # Initialize with inbuilt tools
         self.prompt = prompt
         self.mcp_tools = None
         self.mcp_sse_client = None
@@ -39,6 +41,7 @@ class Agent:
             max_retries=2,
             api_key=api_key
         )
+        print(self.tools)
         self.agent = create_tool_calling_agent(self.llm, self.tools, prompt)
         self.agent_executor = AgentExecutor(agent=self.agent, tools=self.tools, verbose=True)
     
@@ -53,7 +56,7 @@ class Agent:
         
         # Load MCP tools
         self.mcp_tools = await load_mcp_tools(self.mcp_server_session)
-        self.tools = inbuilt_tools + self.mcp_tools
+        self.tools = self.tools + rag_tool  # Combine inbuilt tools with MCP tools and RAG tool
         
         # Recreate agent with updated tools
         self.agent = create_tool_calling_agent(self.llm, self.tools, self.prompt)
