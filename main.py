@@ -5,7 +5,8 @@ import traceback
 async def main():
     try:
         # Create and initialize agent with MCP client in one step
-        agent = await Agent()
+        agent = Agent()
+        await agent.load_mcp_tools({"SSE_URL": "http://localhost:8000/sse"})
         # try:
         await agent.run_interactive()
         # finally:
