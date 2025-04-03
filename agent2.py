@@ -42,7 +42,7 @@ from dotenv import load_dotenv
 from langchain.tools import BaseTool
 from langchain_core.tools import Tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
-from agent_tools import inbuilt_tools
+from agents_tools import inbuilt_tools
 
 # MCP client imports
 from mcp.client.session import ClientSession
