@@ -6,3 +6,4 @@ uvicorn
 langchain_mcp_adapters
 langchain_google_genai
 langchain
+langchain_community
