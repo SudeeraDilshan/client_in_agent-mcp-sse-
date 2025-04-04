@@ -1,27 +1,48 @@
 import asyncio
 from dialdeskai.src.agents.config import AgentConfig
 from dialdeskai.src.runtime.runtime import AgentRuntime
-from agent import EnhancedConversationalAgent
+from agent2 import EnhancedConversationalAgent
 
-async def setup_and_run_agent():
-    """ Setup and run the agent with MCP client """
-    agent_config = AgentConfig(host='127.0.0.1', port=8080, name='EnhancedAgent', self_register=False)
 
-    # Create agent with MCP client
-    agent = await EnhancedConversationalAgent.create(config=agent_config)
-    
-    try:
-        agent_id = AgentRuntime.run_agent(agent)
-        print(f"Agent is running with ID: {agent_id}")
-        print(f"API documentation available at: http://127.0.0.1:8080/docs")
+async def connect_to_mcp_server(agent, server_url="http://localhost:8000/sse"):
+    """Connect the agent to the MCP server"""
+    print(f"Connecting to MCP server at {server_url}...")
+    success = await agent.connect_to_mcp_server(server_url)
+    if success:
+        print("Successfully connected to MCP server and loaded tools")
+    else:
+        print("Failed to connect to MCP server")
+    return success
 
-        AgentRuntime.keep_alive()
-    finally:
-        await agent.cleanup()
+
+async def initialize_agent():
+    """Initialize and connect the agent to the MCP server"""
+    agent_config = AgentConfig(
+        host='127.0.0.1', port=8080, name='EnhancedAgent', self_register=False)
+    agent = EnhancedConversationalAgent(config=agent_config)
+
+    # Connect to MCP server
+    await connect_to_mcp_server(agent)
+
+    return agent
+
 
 def main():
-    """ Main function to run the agent """
-    asyncio.run(setup_and_run_agent())
+    """ Main function demonstrating the agent's usage """
+    # Initialize agent and connect to MCP server
+    loop = asyncio.get_event_loop()
+    agent = loop.run_until_complete(initialize_agent())
+
+    agent_id = AgentRuntime.run_agent(agent)
+    print(f"Agent is running with ID: {agent_id}")
+    print(f"API documentation available at: http://127.0.0.1:8080/docs")
+
+    try:
+        AgentRuntime.keep_alive()
+    except KeyboardInterrupt:
+        print("Shutting down...")
+        loop.run_until_complete(agent.disconnect_from_mcp_server())
+
 
 if __name__ == "__main__":
     main()

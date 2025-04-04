@@ -3,18 +3,19 @@ from agent import Agent
 import traceback
 
 async def main():
+    agent = None
     try:
         # Create and initialize agent with MCP client in one step
-        agent = await Agent.create()
-        # try:
+        agent = Agent()
+        await agent.load_tools(server_url="http://localhost:8000/sse")
         await agent.run_interactive()
-        # finally:
-        #     # The cleanup is now also called inside run_interactive when exiting,
-        #     # but we'll keep it here as a safety measure
-        #     await agent.cleanup()
     except Exception as e:
         traceback.print_exc()
         print(f"Error occurred: {e}")
+    finally:
+        # Ensure cleanup is called even if an exception occurs
+        if agent:
+            await agent.cleanup()
 
 if __name__ == "__main__":
     # Run the async function
