@@ -56,7 +56,7 @@ class Agent:
         
         # Load MCP tools
         self.mcp_tools = await load_mcp_tools(self.mcp_server_session)
-        self.tools = self.tools + rag_tool  # Combine inbuilt tools with MCP tools and RAG tool
+        self.tools = inbuilt_tools + rag_tool + self.mcp_tools  # Combine inbuilt tools with MCP tools and RAG tool
         
         # Recreate agent with updated tools
         self.agent = create_tool_calling_agent(self.llm, self.tools, self.prompt)
