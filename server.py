@@ -37,25 +37,36 @@ async def get_mood_advice(mood: str) -> str:
         return f"I don't have specific advice for the mood '{mood}', but remember that all emotions are valid and temporary. Consider what might help you feel more balanced."
 
 
-async def get_pain_advice(pain: str) -> str:
-    """Get advice based on the user's described pain."""
+async def get_pain_relief_advice(body_part: str) -> str:
+    """Get advice for pain relief based on the body part."""
     advice_dict = {
-        "headache": "For headaches, rest in a quiet, dark room. Stay hydrated and consider over-the-counter pain relievers if appropriate. If headaches are severe or persistent, consult a doctor.",
-        "back pain": "For back pain, maintain good posture and avoid heavy lifting. Apply ice for acute pain and heat for chronic pain. Gentle stretching may help, but stop if pain increases. Consult a doctor if pain is severe or persistent.",
-        "muscle pain": "Rest the affected muscle and apply ice to reduce inflammation. Over-the-counter pain relievers may help. Consider gentle stretching once pain subsides. If pain is severe or lasts more than a few days, consult a doctor.",
-        "joint pain": "Rest the affected joint and apply ice to reduce swelling. Avoid activities that cause pain. Over-the-counter anti-inflammatory medications may help. Consult a doctor if pain persists or is accompanied by swelling.",
-        "stomach pain": "For mild stomach pain, stay hydrated and eat bland foods. Avoid spicy, fatty foods and alcohol. If pain is severe, sudden, or accompanied by fever or vomiting, seek medical attention immediately.",
-        "chest pain": "Chest pain could be serious. If you're experiencing chest pain, especially with shortness of breath, sweating, or pain radiating to the arm or jaw, seek emergency medical help immediately as it could be a heart attack.",
-        "tooth pain": "Rinse with warm salt water and gently floss to remove any trapped food. Over-the-counter pain relievers may help temporarily. Schedule a dental appointment as soon as possible, as tooth pain often indicates a problem requiring treatment.",
-        "sore throat": "Stay hydrated and gargle with warm salt water. Throat lozenges or over-the-counter pain relievers may help. If sore throat is severe, lasts more than a week, or is accompanied by difficulty breathing, seek medical attention.",
-        "ear pain": "Keep the ear dry and avoid inserting anything into the ear canal. Over-the-counter pain relievers may help. If pain is severe, persistent, or accompanied by fever or hearing loss, consult a doctor.",
+        "head": "For headaches, rest in a quiet, dark room. Stay hydrated and consider over-the-counter pain relievers if appropriate. Apply a cold or warm compress to your forehead or neck. If headaches are severe or persistent, consult a doctor.",
+        "neck": "Apply heat or cold to the painful area. Practice gentle stretching and improve your posture. Take over-the-counter pain relievers if needed. If pain is severe or includes numbness in arms, seek medical attention.",
+        "back": "Rest your back but avoid complete bed rest. Apply ice for the first 48 hours, then switch to heat. Practice good posture and proper lifting techniques. Gentle stretches may help once acute pain subsides. Consult a doctor if pain is severe or persistent.",
+        "shoulder": "Rest the affected shoulder and apply ice to reduce inflammation. Simple stretches and range-of-motion exercises may help. OTC pain relievers can reduce pain and swelling. See a doctor if pain persists or if there's significant weakness.",
+        "arm": "Rest the affected arm and elevate it if possible. Apply ice to reduce swelling. Over-the-counter pain medication may help. If pain is severe or there's visible deformity, seek medical attention immediately.",
+        "elbow": "Rest your elbow and avoid activities that cause pain. Apply ice and use compression if swelling is present. OTC anti-inflammatory medications may help. Consider using an elbow brace for support during recovery.",
+        "wrist": "Rest your wrist and avoid activities that increase pain. Apply ice and consider using a wrist splint. Elevate your hand above heart level to reduce swelling. If pain persists or you experience numbness, see a doctor.",
+        "hand": "Rest your hand and avoid gripping activities. Apply ice to reduce inflammation. Keep your hand elevated when possible. Gentle stretching may help. See a doctor if you have severe pain or inability to move fingers.",
+        "hip": "Rest the affected hip and apply ice to reduce inflammation. Over-the-counter pain relievers may help. Avoid activities that worsen pain. If pain persists or walking becomes difficult, consult a doctor.",
+        "knee": "Rest the knee and avoid weight-bearing activities that cause pain. Apply ice and elevate your leg to reduce swelling. Consider using a compression bandage and OTC pain relievers. See a doctor if you can't bear weight or if the knee locks.",
+        "ankle": "Follow the RICE protocol: Rest, Ice, Compression, Elevation. Avoid putting weight on the affected ankle. OTC pain relievers may help reduce pain and swelling. If you can't walk or if there's severe swelling, seek medical attention.",
+        "foot": "Rest your foot and avoid activities that cause pain. Apply ice to reduce inflammation. Consider supportive footwear or orthotics. If pain is severe or walking is difficult, consult a doctor.",
+        "stomach": "Try sipping clear liquids and eating bland foods. Avoid spicy, fatty foods, caffeine, and alcohol. A heating pad on low setting may help. If pain is severe, sudden, or accompanied by fever or vomiting, seek medical attention immediately.",
+        "chest": "Chest pain could be serious and may indicate a heart problem. If you're experiencing chest pain, especially with shortness of breath, sweating, or pain radiating to the arm or jaw, seek emergency medical help immediately.",
+        "tooth": "Rinse with warm salt water and gently floss to remove any trapped food. Over-the-counter pain relievers may help temporarily. Apply a cold compress to the outside of your cheek. Schedule a dental appointment as soon as possible.",
+        "ear": "Keep the ear dry and avoid inserting anything into the ear canal. Apply a warm compress to the outside of the ear. OTC pain relievers may help. If pain is severe, persistent, or accompanied by fever or hearing loss, consult a doctor.",
+        "eye": "Rest your eyes and avoid straining them. Apply a cool compress for pain or swelling. Avoid touching or rubbing your eyes. If you experience severe pain, vision changes, or foreign object sensation, seek immediate medical attention.",
+        "throat": "Stay hydrated and gargle with warm salt water. Suck on throat lozenges or ice chips. Use a humidifier to add moisture to the air. If sore throat is severe, lasts more than a week, or is accompanied by difficulty breathing, seek medical attention.",
+        "joint": "Rest the affected joint and apply ice to reduce swelling. Avoid activities that cause pain. Over-the-counter anti-inflammatory medications may help. Consider gentle range-of-motion exercises once pain subsides. Consult a doctor if pain persists or worsens.",
+        "muscle": "Rest the affected muscle and apply ice for the first 48 hours to reduce inflammation. After 48 hours, apply heat to increase blood flow. Over-the-counter pain relievers may help. Gentle stretching once pain subsides can aid recovery.",
     }
 
-    pain = pain.lower()
-    if pain in advice_dict:
-        return advice_dict[pain]
+    body_part = body_part.lower()
+    if body_part in advice_dict:
+        return advice_dict[body_part]
     else:
-        return f"For pain described as '{pain}', I recommend monitoring your symptoms and consulting a healthcare professional if the pain is severe, persistent, or concerning. Remember that proper medical advice should always be sought for health concerns."
+        return f"For pain in your {body_part}, I recommend resting the area and applying ice to reduce inflammation. Over-the-counter pain relievers may provide temporary relief. If the pain is severe, persistent, or concerning, please consult a healthcare professional for proper diagnosis and treatment."
 
 
 async def fetch_website(
@@ -82,11 +93,11 @@ async def call_tool(name: str, arguments: dict) -> ToolCallResult:
         mood_result = await get_mood_advice(arguments["mood"])
         return [types.TextContent(type="text", text=mood_result)]
 
-    elif name == "pain_advice":
-        if "pain" not in arguments:
-            logger.error("Missing required argument 'pain'")
-            raise ValueError("Missing required argument 'pain'")
-        pain_advice = await get_pain_advice(arguments["pain"])
+    elif name == "pain_relief":
+        if "body_part" not in arguments:
+            logger.error("Missing required argument 'body_part'")
+            raise ValueError("Missing required argument 'body_part'")
+        pain_advice = await get_pain_relief_advice(arguments["body_part"])
         return [types.TextContent(type="text", text=pain_advice)]
 
     elif name == "fetch":
@@ -115,15 +126,15 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
-            name="pain_advice",
-            description="Get advice on how to be careful and protected when experiencing pain",
+            name="pain_relief",
+            description="Get advice on how to relieve pain in different body parts",
             inputSchema={
                 "type": "object",
-                "required": ["pain"],
+                "required": ["body_part"],
                 "properties": {
-                    "pain": {
+                    "body_part": {
                         "type": "string",
-                        "description": "The type of pain you are experiencing",
+                        "description": "The body part where you're experiencing pain (e.g., head, back, knee)",
                     }
                 },
             },
