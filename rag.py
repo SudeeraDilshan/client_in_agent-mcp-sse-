@@ -7,7 +7,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import CharacterTextSplitter
 
 
-def create_vector_store() -> FAISS:
+def create_vector_store() -> FAISS | None:
     """Create a vector store from the knowledge base text file."""
     try:
         current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -29,7 +29,6 @@ def create_vector_store() -> FAISS:
 
     except Exception as e:
         print(f"Error creating vector store: {str(e)}")
-        raise RuntimeError(f"Failed to load knowledge base: {str(e)}")
 
 
 def create_retriever_tool_func():

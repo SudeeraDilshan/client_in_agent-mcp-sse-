@@ -1,6 +1,6 @@
 import os
 
-from agent_tools import inbuilt_tools
+from tools import inbuilt_tools
 from dialdeskai.src.agents.base import BaseAgent
 from dialdeskai.src.queue.trigger import EventTrigger
 from dialdeskai.src.store.session import Session
@@ -12,7 +12,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mcp_adapters.tools import load_mcp_tools
 from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
-from rag2 import rag_tool
+from rag import rag_tool
 
 load_dotenv()
 
