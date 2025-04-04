@@ -262,70 +262,122 @@ class EnhancedConversationalAgent(BaseAgent):
         # Create an OpenAI functions agent with the tools
         agent = create_tool_calling_agent(self.llm, self.tools, prompt)
 
-        # Create an agent executor
+        # Create an agent executor with more robust error handling
         agent_executor = AgentExecutor(
             agent=agent,
             tools=self.tools,
             verbose=True,
-            handle_parsing_errors=True,
+            # handle_parsing_errors=True,
             max_iterations=3,
-            return_intermediate_steps=True
+            # return_intermediate_steps=True,
+            # max_execution_time=30  # Add timeout to prevent hanging
         )
 
         return agent_executor
 
-    def _handle_tool_selection(self, user_input: str, chat_history: List[BaseMessage]) -> Dict[str, Any]:
-        """Determine if a tool should be used based on the user input."""
+    async def process_request(self, context):
+        """Main request processing method with tool selection."""
+        session_memory = self._initialize_session_memory(context)
+        data = context.request.get("query")
+        if not data:
+            return AgentOutput(result="Sorry, I didn't receive any message to process. Please try again.")
+
+        session_id = session_memory["routing_info"]["session_id"]
+        chat_history = session_memory["chat_history"]
+
         try:
-            # First, check if any tools want to handle this query
-            for tool in self.tools:
-                if hasattr(tool, 'should_use') and tool.should_use(user_input):
-                    # Use the tool directly
-                    result = tool.run(user_input)
-                    if isinstance(result, dict) and result.get("status") == "success":
-                        return {
-                            "used_tool": True,
-                            "result": result.get("result", ""),
-                            "tool_calls": [(tool.name, result)]
-                        }
-                    else:
-                        return {
-                            "used_tool": False,
-                            "result": result.get("result", "I encountered an error processing your request."),
-                        }
+            current_state = session_memory["state"]
 
-            # If no tool wants to handle it, use the agent chain for general conversation
-            result = self.agent_chain.invoke({
-                "input": user_input,
+            # Special handling for ROUTING and COLLECTING_INFO states
+            if current_state == AgentState.ROUTING:
+                return self._handle_routing_state(context, data, session_memory)
+            elif current_state == AgentState.COLLECTING_INFO:
+                return self._handle_collecting_info_state(context, data, session_memory)
+
+            # Check if we need human routing based on explicit requests
+            if self._needs_human_interaction(data):
+                return self._handle_human_routing(context, data, session_memory)
+
+            # Use the agent chain directly for all tool selection and conversation handling
+            chain_input = {
+                "input": data,
                 "chat_history": chat_history
-            })
-
-            # If the agent used any tools, return the result
-            if isinstance(result, dict):
-                if "intermediate_steps" in result and result["intermediate_steps"]:
-                    return {
-                        "used_tool": True,
-                        "result": result.get("output", ""),
-                        "tool_calls": result["intermediate_steps"]
-                    }
-                elif "output" in result:
-                    return {
-                        "used_tool": False,
-                        "result": result["output"]
-                    }
-
-            # If we get here, something unexpected happened
-            return {
-                "used_tool": False,
-                "result": "I apologize, but I encountered an issue processing your request. Please try again."
             }
+
+            try:
+                # Invoke the agent chain to handle tool selection
+                chain_result = await self.agent_chain.ainvoke(chain_input)
+
+                output = chain_result.get("output", "")
+                print(f"Agent output: {output}")
+
+                # Always return output wrapped in AgentOutput object
+                return AgentOutput(result=output)
+
+            except Exception as context_error:
+                print(f"Error in agent chain: {str(context_error)}")
+                # Fall back to conversation chain if agent chain fails
+                try:
+                    # Prepare input for conversation chain
+                    memory_system = session_memory.get("memory_system")
+                    conversation_input = {"input": data}
+
+                    # Add memory components to the input
+                    if memory_system:
+                        if "buffer_window" in memory_system:
+                            recent_vars = memory_system["buffer_window"].load_memory_variables({
+                            })
+                            if "recent_messages" in recent_vars:
+                                conversation_input["recent_messages"] = recent_vars["recent_messages"]
+
+                        if "token_buffer" in memory_system:
+                            token_vars = memory_system["token_buffer"].load_memory_variables({
+                            })
+                            if "token_buffer" in token_vars:
+                                conversation_input["token_buffer"] = token_vars["token_buffer"]
+
+                        if "summary" in memory_system:
+                            summary_vars = memory_system["summary"].load_memory_variables({
+                            })
+                            if "conversation_summary" in summary_vars:
+                                conversation_input["conversation_summary"] = summary_vars["conversation_summary"]
+
+                    # Use conversation chain as fallback
+                    output = await self.conversation_chain.ainvoke(conversation_input)
+                except Exception as fallback_error:
+                    print(f"Context window exceeded: {str(fallback_error)}")
+                    output = self._handle_context_window_exceeded(
+                        session_id, data)
+
+            # Update chat history
+            session_memory["chat_history"].extend(
+                [HumanMessage(content=data), AIMessage(content=output)]
+            )
+
+            # Update memory with this interaction
+            self._update_memory(session_id, data, output)
+
+            # Update context
+            self._update_context(context, session_memory)
+
+            # Always return the result wrapped in AgentOutput
+            return AgentOutput(result=output)
 
         except Exception as e:
-            print(f"Error in tool selection: {str(e)}")
-            return {
-                "used_tool": False,
-                "result": "I apologize, but I encountered an issue processing your request. Please try again."
-            }
+            error_msg = "I apologize, but I encountered an issue processing your request. Please try again."
+            print(f"Error processing input: {str(e)}")
+
+            try:
+                self._update_memory(session_id, data, error_msg)
+            except:
+                pass
+
+            session_memory["chat_history"].extend(
+                [HumanMessage(content=data), AIMessage(content=error_msg)]
+            )
+            self._update_context(context, session_memory)
+
+            return AgentOutput(result=error_msg)
 
     def _create_memory_system(self, session_id: str) -> Dict:
         """Create a combined memory system using different memory types."""
@@ -1102,119 +1154,3 @@ class EnhancedConversationalAgent(BaseAgent):
                 await self.mcp_sse_client.__aexit__(None, None, None)
         except Exception as e:
             print(f"Error disconnecting from MCP server: {str(e)}")
-
-    def process_request(self, context):
-        """Main request processing method with tool selection."""
-        session_memory = self._initialize_session_memory(context)
-        data = context.request.get("query")
-        if not data:
-            return AgentOutput(result="Sorry, I didn't receive any message to process. Please try again.")
-
-        session_id = session_memory["routing_info"]["session_id"]
-        chat_history = session_memory["chat_history"]
-
-        try:
-            current_state = session_memory["state"]
-
-            # Special handling for ROUTING and COLLECTING_INFO states
-            if current_state == AgentState.ROUTING:
-                return self._handle_routing_state(context, data, session_memory)
-            elif current_state == AgentState.COLLECTING_INFO:
-                return self._handle_collecting_info_state(context, data, session_memory)
-
-            # Tool handling and regular conversation
-            tool_result = self._handle_tool_selection(data, chat_history)
-
-            if tool_result.get("used_tool", False):
-                # A tool was used, process the result
-                output = tool_result.get("result", "")
-
-                # Special handling for human routing tool
-                for step in tool_result.get("tool_calls", []):
-                    tool_name, tool_result = step
-
-                    # Check if this is the human routing tool
-                    if tool_name == "human_routing":
-                        # Update state for human routing
-                        session_memory["state"] = AgentState.ROUTING
-                        routing_info = session_memory["routing_info"]
-
-                        # Extract routing parameters from the tool result
-                        if isinstance(tool_result, dict):
-                            routing_info.update({
-                                "language": tool_result.get("language", routing_info.get("language", "English")),
-                                "department": tool_result.get("department", routing_info.get("department", "customer_service")),
-                                "human_connected": True
-                            })
-
-                        session_memory["routing_info"] = routing_info
-                        self._update_context(context, session_memory)
-            else:
-                # No tool was used, handle regular conversation
-                # Check if we need human routing
-                if self._needs_human_interaction(data):
-                    return self._handle_human_routing(context, data, session_memory)
-
-                # Use the conversation chain with memory integration
-                memory_system = session_memory.get("memory_system")
-                chain_input = {"input": data}
-
-                # Add memory components to the input
-                if memory_system:
-                    # (Your existing memory integration code)
-                    if "buffer_window" in memory_system:
-                        recent_vars = memory_system["buffer_window"].load_memory_variables({
-                        })
-                        if "recent_messages" in recent_vars:
-                            chain_input["recent_messages"] = recent_vars["recent_messages"]
-
-                    # Add token buffer
-                    if "token_buffer" in memory_system:
-                        token_vars = memory_system["token_buffer"].load_memory_variables({
-                        })
-                        if "token_buffer" in token_vars:
-                            chain_input["token_buffer"] = token_vars["token_buffer"]
-
-                    # Add conversation summary
-                    if "summary" in memory_system:
-                        summary_vars = memory_system["summary"].load_memory_variables({
-                        })
-                        if "conversation_summary" in summary_vars:
-                            chain_input["conversation_summary"] = summary_vars["conversation_summary"]
-
-                # Invoke conversation chain
-                try:
-                    output = self.conversation_chain.invoke(chain_input)
-                except Exception as context_error:
-                    print(f"Context window exceeded: {str(context_error)}")
-                    output = self._handle_context_window_exceeded(
-                        session_id, data)
-
-            # Update chat history
-            session_memory["chat_history"].extend(
-                [HumanMessage(content=data), AIMessage(content=output)]
-            )
-
-            # Update memory with this interaction
-            self._update_memory(session_id, data, output)
-
-            # Update context
-            self._update_context(context, session_memory)
-
-            return AgentOutput(result=output)
-
-        except Exception as e:
-            error_msg = "I apologize, but I encountered an issue processing your request. Please try again."
-            print(f"Error processing input: {str(e)}")
-
-            try:
-                self._update_memory(session_id, data, error_msg)
-            except:
-                pass
-
-            session_memory["chat_history"].extend(
-                [HumanMessage(content=data), AIMessage(content=error_msg)]
-            )
-            self._update_context(context, session_memory)
-
-            return AgentOutput(result=error_msg)
