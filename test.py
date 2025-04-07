@@ -45,6 +45,7 @@ load_dotenv()
 
 langchain.debug = False
 
+
 class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
 
     def __init__(self, config: AgentConfig):
@@ -66,7 +67,7 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
             Tool(
                 name="rag",
                 func=self.rag_tool.get_relevant_context,
-                description="Retrieves relevant context from the knowledge base for customer queries."
+                description="Use this tool to answer questions about company products, services, policies, or procedures. It searches our knowledge base for relevant information. Always use this tool when answering questions about our company, products, or services."
             ),
             Tool(
                 name="magic_function",
@@ -88,9 +89,9 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
         self.agent_chain = None
 
         self.memory_config = {
-            "max_token_limit": 4000, 
-            "window_size": 5, 
-            "summary_interval": 10,  
+            "max_token_limit": 4000,
+            "window_size": 5,
+            "summary_interval": 10,
         }
 
         self.routing_chain = self._create_routing_chain()
@@ -133,8 +134,9 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
         
         ## TOOLS USAGE:
         - You have access to several tools to help customers. Always use the most appropriate tool for the task.
-        - Only use tools when necessary to fulfill a customer request that requires external data or actions.
-        - Be sure to use the RAG tool to retrieve information from our knowledge base when answering product or service questions.
+        - For ANY questions about company products, services, policies, or procedures, you MUST use the RAG tool to search our knowledge base.
+        - The RAG tool is your primary source of information about our company. Use it before providing any information about our products or services.
+        - Only use other tools when necessary to fulfill a customer request that requires external data or actions.
         - If the customer wants to speak to a human, use the human_routing tool to connect them to the right department.
         
         ## RESPONSE FORMAT:
@@ -204,9 +206,10 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
                 output = chain_result.get("output", "")
 
                 if isinstance(output, list) and output and hasattr(output[0], 'text'):
-                # Extract text content from MCP tool results
-                    output = "\n".join([item.text for item in output if hasattr(item, 'text')])
-            
+                    # Extract text content from MCP tool results
+                    output = "\n".join(
+                        [item.text for item in output if hasattr(item, 'text')])
+
                 print(f"Agent output: {output}")
                 # Always return output wrapped in AgentOutput object
                 return AgentOutput(result=output)
@@ -243,7 +246,8 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
                     output = await self.conversation_chain.ainvoke(conversation_input)
 
                     if isinstance(output, list) and output and hasattr(output[0], 'text'):
-                        output = "\n".join([item.text for item in output if hasattr(item, 'text')])
+                        output = "\n".join(
+                            [item.text for item in output if hasattr(item, 'text')])
                 except Exception as fallback_error:
                     print(f"Context window exceeded: {str(fallback_error)}")
                     output = self._handle_context_window_exceeded(
@@ -418,5 +422,3 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
                 "status": "success",
                 "message": f"I'm transferring you to a {department} specialist who speaks {language}. A human agent will assist you shortly."
             }
-
- 
