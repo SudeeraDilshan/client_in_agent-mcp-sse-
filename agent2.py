@@ -69,13 +69,10 @@ class EnhancedConversationalAgent(BaseAgent):
         self.human_routing_tool = HumanRoutingTool()
         self.rag_tool = RAGTool()
         self.magic_function_tool = inbuilt_tools[0]
-
-        self.tools_registry = {
-            "human_routing": self.human_routing_tool,
-            "rag": self.rag_tool,
-            "magic_function": self.magic_function_tool
-        }
-
+        self.mcp_tools = None
+        self.mcp_sse_client = None
+        self.mcp_server_session = None
+       
         self.tools = [
             Tool(
                 name="human_routing",
@@ -92,7 +89,7 @@ class EnhancedConversationalAgent(BaseAgent):
                 func=self.magic_function_tool.run,
                 description="Adds 10 to any input number. Input should be a valid number (integer or decimal)."
             )
-        ]
+        ] 
 
         self.llm = ChatOpenAI(
             model="gpt-3.5-turbo",
@@ -104,7 +101,7 @@ class EnhancedConversationalAgent(BaseAgent):
             temperature=0.1
         )
 
-        self.agent_chain = self._create_agent_chain()
+        self.agent_chain = None
 
         # Initialize memory components
         self.memory_config = {
@@ -151,79 +148,31 @@ class EnhancedConversationalAgent(BaseAgent):
         self.routing_chain = self._create_routing_chain()
         self.conversation_chain = self._create_conversation_chain()
 
-        self.mcp_tools = None
-        self.mcp_sse_client = None
-        self.mcp_server_session = None
+    async def connect_to_mcp_server(self, server_url="http://localhost:8000/sse"):
+        """Connect to the MCP server and load tools."""
+        try:
+            # Store the client as instance attribute to prevent garbage collection
+            self.mcp_sse_client = sse_client(server_url)
+            streams = await self.mcp_sse_client.__aenter__()
+            self.mcp_server_session = ClientSession(streams[0], streams[1])
+            await self.mcp_server_session.__aenter__()
+            await self.mcp_server_session.initialize()
 
-    def register_tool(self, tool: Union[BaseTool, Tool, Any], name: Optional[str] = None) -> None:
-        """Register a new tool with the agent.
+            # Load MCP tools
+            self.mcp_tools = await load_mcp_tools(self.mcp_server_session)
 
-        Args:
-            tool: The tool to register. Can be a LangChain Tool, BaseTool, or any object with a _run method.
-            name: Optional name for the tool. If not provided, will use tool.name if available.
-        """
-        # Determine the tool name
-        if name:
-            tool_name = name
-        elif hasattr(tool, "name"):
-            tool_name = tool.name
-        else:
-            tool_name = tool.__class__.__name__.lower()
+            self.tools = self.tools + self.mcp_tools
 
-        # Add to tools registry
-        self.tools_registry[tool_name] = tool
-
-        # Convert to LangChain Tool format if needed
-        if not isinstance(tool, Tool):
-            if isinstance(tool, BaseTool):
-                lc_tool = tool
-            else:
-                # If it's a custom object with a _run method, wrap it
-                if hasattr(tool, "_run"):
-                    tool_func = tool._run
-                elif hasattr(tool, "run"):
-                    tool_func = tool.run
-                else:
-                    raise ValueError(
-                        f"Tool {tool_name} must have a _run or run method")
-
-                description = getattr(
-                    tool, "description", f"Tool for {tool_name} operations")
-
-                lc_tool = Tool(
-                    name=tool_name,
-                    func=tool_func,
-                    description=description
-                )
-        else:
-            lc_tool = tool
-
-        # Add to tools list
-        self.tools.append(lc_tool)
-
-        # Recreate the agent chain with updated tools
-        self.agent_chain = self._create_agent_chain()
-
-    def unregister_tool(self, tool_name: str) -> bool:
-        """Unregister a tool from the agent.
-
-        Args:
-            tool_name: The name of the tool to unregister
-
-        Returns:
-            bool: True if the tool was found and removed, False otherwise
-        """
-        if tool_name in self.tools_registry:
-            del self.tools_registry[tool_name]
-
-            # Remove from tools list
-            self.tools = [
-                tool for tool in self.tools if tool.name != tool_name]
-
-            # Recreate the agent chain with updated tools
             self.agent_chain = self._create_agent_chain()
+        
             return True
-        return False
+        except Exception as e:
+            print(f"Error connecting to MCP server: {str(e)}")
+
+            if self.agent_chain is None:
+                self.agent_chain = self._create_agent_chain()
+            return False
+
 
     def _create_agent_chain(self) -> Runnable:
         """Create an agent chain that can use tools and handle conversation."""
@@ -269,14 +218,28 @@ class EnhancedConversationalAgent(BaseAgent):
             verbose=True,
             # handle_parsing_errors=True,
             max_iterations=3,
-            # return_intermediate_steps=True,
+            return_intermediate_steps=True,
             # max_execution_time=30  # Add timeout to prevent hanging
         )
+        
+        def process_result(result):
+            if isinstance(result, dict) and "intermediate_steps" in result:
+             # Process intermediate steps for MCP tool outputs
+                for step in result["intermediate_steps"]:
+                    if len(step) >= 2:
+                        tool_output = step[1]
+                        if isinstance(tool_output, list) and len(tool_output) > 0 and hasattr(tool_output[0], "text"):
+                            result["output"] = "\n".join([item.text for item in tool_output if hasattr(item, "text")])
+                        break
+            return result
 
-        return agent_executor
+        return RunnablePassthrough() | agent_executor | process_result
 
     async def process_request(self, context):
         """Main request processing method with tool selection."""
+
+        if self.agent_chain is None:
+            self.agent_chain = self._create_agent_chain()
         session_memory = self._initialize_session_memory(context)
         data = context.request.get("query")
         if not data:
@@ -308,7 +271,43 @@ class EnhancedConversationalAgent(BaseAgent):
                 # Invoke the agent chain to handle tool selection
                 chain_result = await self.agent_chain.ainvoke(chain_input)
 
-                output = chain_result.get("output", "")
+                output = ""
+                
+                # Check if we have a dictionary result from the chain
+                if isinstance(chain_result, dict):
+                    if "output" in chain_result:
+                        output = chain_result["output"]
+                    elif "return_values" in chain_result:
+                        output = chain_result["return_values"]
+                    # Check if we have intermediate steps that might contain tool outputs
+                    elif "intermediate_steps" in chain_result:
+                        steps = chain_result["intermediate_steps"]
+                        for step in steps:
+                            if len(step) >= 2:  # Each step should be (action, output)
+                                tool_output = step[1]
+                                # Handle MCP tool outputs specifically
+                                if isinstance(tool_output, list) and len(tool_output) > 0:
+                                    if hasattr(tool_output[0], "text"):
+                                        # For MCP tools that return TextContent objects
+                                        output += "\n".join([item.text for item in tool_output if hasattr(item, "text")])
+                                    else:
+                                        # For other list-type outputs
+                                        output += "\n".join([str(item) for item in tool_output])
+                                else:
+                                    output += str(tool_output)
+                # Direct string output
+                elif isinstance(chain_result, str):
+                    output = chain_result
+                # Handle direct MCP tool outputs
+                elif isinstance(chain_result, list) and len(chain_result) > 0:
+                    if hasattr(chain_result[0], "text"):
+                        output = "\n".join([item.text for item in chain_result if hasattr(item, "text")])
+                    else:
+                        output = "\n".join([str(item) for item in chain_result])
+                else:
+                    # Last resort - convert whatever we got to string
+                    output = str(chain_result)
+                
                 print(f"Agent output: {output}")
 
                 # Always return output wrapped in AgentOutput object
@@ -534,60 +533,6 @@ class EnhancedConversationalAgent(BaseAgent):
 
         return routing_prompt | self.llm | StrOutputParser()
 
-    def _create_fallback_chain(self) -> Runnable:
-        """Create a fallback chain for when context windows are exceeded."""
-
-        fallback_prompt = ChatPromptTemplate.from_messages([
-            SystemMessagePromptTemplate.from_template("""
-            You are an AI assistant handling a conversation where the context window has been exceeded.
-            
-            ## OBJECTIVE:
-            Maintain conversation continuity despite limited context.
-            
-            ## GUIDELINES:
-            - Acknowledge that you may have incomplete information about the conversation history.
-            - Focus on the customer's most recent message.
-            - Ask clarifying questions if necessary to ensure you understand the customer's current needs.
-            - Offer to summarize what you understand so far before proceeding.
-            - If appropriate, offer to connect the customer to a human agent who can review their full history.
-            
-            Be transparent about the limitation while maintaining a helpful and professional tone.
-            """),
-            MessagesPlaceholder(
-                variable_name="conversation_summary", optional=True),
-            HumanMessagePromptTemplate.from_template("{input}")
-        ])
-
-        return fallback_prompt | self.llm | StrOutputParser()
-
-    def _create_summary_chain(self) -> Runnable:
-        """Create a chain for summarizing conversation history."""
-
-        summary_prompt = ChatPromptTemplate.from_messages([
-            SystemMessagePromptTemplate.from_template("""
-            You are an AI assistant tasked with summarizing a customer service conversation.
-            
-            ## OBJECTIVE:
-            Create a concise yet comprehensive summary of the conversation that captures:
-            1. The customer's main concerns or questions
-            2. Any important details or context provided by the customer
-            3. The current status of the inquiry
-            4. Any actions that have been promised or taken
-            5. The customer's language preference and department needs
-            
-            ## GUIDELINES:
-            - Prioritize factual information over pleasantries
-            - Include all relevant details that would be needed to continue the conversation
-            - Format the summary in a way that's easy to scan quickly
-            - Be objective and avoid interpretations or assumptions
-            
-            Your summary should allow anyone reading it to quickly understand the conversation's context and continue assisting the customer effectively.
-            """),
-            MessagesPlaceholder(variable_name="chat_history"),
-        ])
-
-        return summary_prompt | self.summary_llm | StrOutputParser()
-
     def _extract_language(self, text: str) -> Optional[str]:
         """Extract language preference from text using improved detection."""
         text_lower = text.lower()
@@ -770,21 +715,6 @@ class EnhancedConversationalAgent(BaseAgent):
                 "status": "success",
                 "message": f"I'm transferring you to a {department} specialist who speaks {language}. A human agent will assist you shortly."
             }
-
-    def _create_conversation_summary(self, session_id: str) -> str:
-        """Create a summary of the conversation for human agents."""
-        session_memory = self._get_session_memory(session_id)
-        if not session_memory or not session_memory.get("chat_history"):
-            return "No conversation history available."
-
-        try:
-            chat_history = session_memory["chat_history"]
-            summary_input = {"chat_history": chat_history}
-            summary = self._create_summary_chain().invoke(summary_input)
-            return summary
-        except Exception as e:
-            print(f"Error creating conversation summary: {str(e)}")
-            return "Error creating conversation summary. Please review the conversation history directly."
 
     def _get_session_memory(self, session_id: str):
         """Retrieve or create session memory."""
@@ -1123,34 +1053,4 @@ class EnhancedConversationalAgent(BaseAgent):
         # Default to customer service if no clear indicators
         return "customer_service"
 
-    async def connect_to_mcp_server(self, server_url="http://localhost:8000/sse"):
-        """Connect to the MCP server and load tools."""
-        try:
-            # Store the client as instance attribute to prevent garbage collection
-            self.mcp_sse_client = sse_client(server_url)
-            streams = await self.mcp_sse_client.__aenter__()
-            self.mcp_server_session = ClientSession(streams[0], streams[1])
-            await self.mcp_server_session.__aenter__()
-            await self.mcp_server_session.initialize()
-
-            # Load MCP tools
-            self.mcp_tools = await load_mcp_tools(self.mcp_server_session)
-
-            # Register MCP tools with the agent
-            for tool in self.mcp_tools:
-                self.register_tool(tool)
-
-            return True
-        except Exception as e:
-            print(f"Error connecting to MCP server: {str(e)}")
-            return False
-
-    async def disconnect_from_mcp_server(self):
-        """Disconnect from the MCP server."""
-        try:
-            if hasattr(self, 'mcp_server_session') and self.mcp_server_session:
-                await self.mcp_server_session.__aexit__(None, None, None)
-            if hasattr(self, 'mcp_sse_client') and self.mcp_sse_client:
-                await self.mcp_sse_client.__aexit__(None, None, None)
-        except Exception as e:
-            print(f"Error disconnecting from MCP server: {str(e)}")
+    

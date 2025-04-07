@@ -1,7 +1,8 @@
 import asyncio
 from dialdeskai.src.agents.config import AgentConfig
 from dialdeskai.src.runtime.runtime import AgentRuntime
-from agent2 import EnhancedConversationalAgent
+from test import EnhancedConversationalAgent
+
 
 
 async def initialize_agent():
@@ -10,7 +11,6 @@ async def initialize_agent():
         host='127.0.0.1', port=8080, name='EnhancedAgent', self_register=False)
     agent = EnhancedConversationalAgent(config=agent_config)
     await agent.connect_to_mcp_server(server_url="http://localhost:8000/sse")
-
     return agent
 
 
