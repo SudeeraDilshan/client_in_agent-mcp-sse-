@@ -7,9 +7,9 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_mcp_adapters.tools import load_mcp_tools
 from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
-from agent_tools import inbuilt_tools  # Custom inbuilt tools
+from tools import inbuilt_tools  # Custom inbuilt tools
 # from rag_tool import rag_tool
-from rag2 import rag_tool  # Custom RAG tool
+from rag import rag_tool  # Custom RAG tool
 
 # Load environment variables
 load_dotenv()
