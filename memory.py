@@ -22,7 +22,6 @@ class Memory:
         def _create_memory_system(self, session_id: str) -> Dict:
             """Create a combined memory system using different memory types."""
 
-            # Recent messages memory (keeps last few interactions)
             buffer_window_memory = ConversationBufferWindowMemory(
                 k=self.memory_config["window_size"],
                 return_messages=True,
@@ -31,7 +30,6 @@ class Memory:
                 memory_key="recent_messages"
             )
 
-            # Token-limited memory for managing context length
             token_buffer_memory = ConversationTokenBufferMemory(
                 llm=self.llm,
                 max_token_limit=self.memory_config["max_token_limit"],
@@ -41,7 +39,6 @@ class Memory:
                 memory_key="token_buffer"
             )
 
-            # Summary memory for long conversations
             summary_memory = ConversationSummaryMemory(
                 llm=self.summary_llm,
                 return_messages=True,
@@ -50,7 +47,6 @@ class Memory:
                 memory_key="conversation_summary"
             )
 
-            # Combined memory system
             memory_system = {
                 "buffer_window": buffer_window_memory,
                 "token_buffer": token_buffer_memory,
@@ -78,16 +74,13 @@ class Memory:
             """Update the memory system with new conversation turns."""
             memory_system = self._get_session_memory(session_id)
 
-            # Update all memory components
             for memory_key in ["buffer_window", "token_buffer"]:
                 memory = memory_system[memory_key]
                 memory.save_context({"input": human_message},
                                     {"output": ai_message})
 
-            # Increment message counter
             memory_system["message_count"] += 1
 
-            # Check if it's time to update the summary
             if memory_system["message_count"] % self.memory_config["summary_interval"] == 0:
                 self._update_conversation_summary(session_id)
 
@@ -95,22 +88,18 @@ class Memory:
             """Update the conversation summary based on token buffer memory."""
             memory_system = self._get_session_memory(session_id)
 
-            # Get messages from token buffer
             token_buffer = memory_system["token_buffer"]
             buffer_messages = token_buffer.buffer
 
             if not buffer_messages:
                 return
 
-            # Create a summary input with the buffer messages
             chat_history = buffer_messages
             summary_input = {"chat_history": chat_history}
 
             try:
-                # Generate a new summary
                 summary = self._create_summary_chain().invoke(summary_input)
 
-                # Save the summary to summary memory
                 summary_memory = memory_system["summary"]
                 summary_memory.clear()  # Clear old summary
                 summary_memory.save_context(
@@ -123,20 +112,16 @@ class Memory:
             memory_system = self._get_session_memory(session_id)
 
             try:
-                # First try to reduce the token buffer size
                 token_buffer = memory_system["token_buffer"]
                 token_buffer.max_token_limit = token_buffer.max_token_limit // 2
 
-                # Force a summary update
                 self._update_conversation_summary(session_id)
 
-                # Use only the summary and most recent messages
                 fallback_input = {
                     "input": input_text,
                     "conversation_summary": memory_system["summary"].buffer
                 }
 
-                # Use the fallback chain
                 response = self._create_fallback_chain().invoke(fallback_input)
 
                 return response
@@ -158,10 +143,8 @@ class Memory:
             session_id = context.session_id if hasattr(
                 context, 'session_id') else "default_session"
 
-            # Initialize or retrieve memory system
             memory_system = self._get_session_memory(session_id)
 
-            # Set up session information
             session_memory = {
                 "chat_history": getattr(context, 'chat_history', []),
                 "state": getattr(context, 'agent_state', AgentState.AVAILABLE),
@@ -184,7 +167,6 @@ class Memory:
             context.add_to_context("agent_state", session_memory["state"])
             context.add_to_context("routing_info", session_memory["routing_info"])
 
-            # Add memory components to context if needed
             if "memory_system" in session_memory:
                 context.add_to_context(
                     "memory_system", session_memory["memory_system"])

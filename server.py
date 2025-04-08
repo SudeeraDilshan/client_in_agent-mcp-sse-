@@ -8,7 +8,6 @@ import mcp.types as types
 import logging
 import httpx
 
-# Set up logging
 logging.basicConfig(level=logging.DEBUG, filename="server.log", filemode="w")
 logger = logging.getLogger(__name__)
 

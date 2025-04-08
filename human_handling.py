@@ -28,7 +28,6 @@ class HumanHandlingMixin:
             department = routing_info.get('department') or "customer_service"
             query = routing_info.get('query') or data
 
-            # Route to human with enhanced context from memories
             routing_result = self._route_to_human(
                 query, language, department, session_id, room_id)
             routing_info['human_connected'] = True
@@ -38,7 +37,6 @@ class HumanHandlingMixin:
             chat_history.extend(
                 [HumanMessage(content=data), AIMessage(content=response_message)])
 
-            # Update memory with this interaction
             self._update_memory(session_id, data, response_message)
 
             session_memory["chat_history"] = chat_history
@@ -51,7 +49,6 @@ class HumanHandlingMixin:
             chat_history.extend(
                 [HumanMessage(content=data), AIMessage(content=forward_message)])
 
-            # Update memory even for forwarded messages
             self._update_memory(session_id, data, forward_message)
 
             session_memory["chat_history"] = chat_history
@@ -74,7 +71,6 @@ class HumanHandlingMixin:
             if "recent_messages" in recent_messages:
                 routing_input["recent_messages"] = recent_messages["recent_messages"]
 
-        # Extract language and department from message
         detected_language = self._extract_language(data)
         detected_department = self._extract_department(data)
 
@@ -94,13 +90,11 @@ class HumanHandlingMixin:
         if detected_department and not routing_info.get('department'):
             routing_info['department'] = detected_department
 
-        # Check if we have enough information to route
         if routing_info.get('language') and routing_info.get('department'):
             session_memory["state"] = AgentState.ROUTING
             self._update_context(context, session_memory)
             return self._handle_routing_state(context, data, session_memory)
 
-        # Build response message
         info_message = f"I've noted your preference"
         if detected_language:
             info_message += f" for {detected_language} language"
@@ -113,7 +107,6 @@ class HumanHandlingMixin:
         if not routing_info.get('department'):
             info_message += " Which department do you need assistance with? Options: Sales, Customer Service, Technical Support."
 
-        # Update memory and context
         chat_history.extend([HumanMessage(content=data),
                             AIMessage(content=info_message)])
         self._update_memory(session_id, data, info_message)
@@ -127,13 +120,10 @@ class HumanHandlingMixin:
     def _analyze_conversation_for_department(self, session_id: str) -> Optional[str]:
         """Analyze the entire conversation history to determine the most likely department needed."""
 
-        # Get memory system and conversation history
         memory_system = self._get_session_memory(session_id)
 
-        # Collect all user messages from different memory components
         user_messages = []
 
-        # Get messages from recent window memory
         if "buffer_window" in memory_system:
             recent_messages = memory_system["buffer_window"].load_memory_variables(
                 {}).get("recent_messages", [])
@@ -141,7 +131,6 @@ class HumanHandlingMixin:
                 if isinstance(message, HumanMessage):
                     user_messages.append(message.content)
 
-        # Also check token buffer for longer history
         if "token_buffer" in memory_system:
             token_messages = memory_system["token_buffer"].load_memory_variables(
                 {}).get("token_buffer", [])
@@ -149,62 +138,51 @@ class HumanHandlingMixin:
                 if isinstance(message, HumanMessage):
                     user_messages.append(message.content)
 
-        # Combine all user messages into one text for analysis
         combined_text = " ".join(user_messages).lower()
 
-        # Count occurrences of department-related keywords
         department_counts = {
             "sales": 0,
             "customer_service": 0,
             "technical_support": 0
         }
 
-        # Process the combined text to count department indicators
         for keyword, department in self.department_map.items():
             if keyword in combined_text:
                 department_counts[department] += 1
 
-        # If we have a clear winner, return that department
         max_count = max(department_counts.values())
         if max_count > 0:
-            # Find department with max count
             for dept, count in department_counts.items():
                 if count == max_count:
                     return dept
 
-        # If no clear indicators, fall back to more sophisticated analysis
         return self._advanced_department_analysis(combined_text)
 
     def _advanced_department_analysis(self, text: str) -> Optional[str]:
         """Use more sophisticated analysis to determine department when keyword matching fails."""
 
-        # Technical support indicators
         tech_patterns = [
             "not working", "broken", "error", "bug", "fix", "problem",
             "troubleshoot", "install", "update", "upgrade", "version",
             "crash", "slow", "login issue", "password reset", "access"
         ]
 
-        # Sales indicators
         sales_patterns = [
             "price", "cost", "discount", "purchase", "buy", "package",
             "subscription", "plan", "trial", "demo", "quote", "offer",
             "availability", "order", "delivery"
         ]
 
-        # Customer service indicators
         cs_patterns = [
             "account", "bill", "charge", "refund", "cancel", "subscription",
             "policy", "complaint", "feedback", "service", "assistance",
             "help", "support", "information", "question"
         ]
 
-        # Count matches for each category
         tech_count = sum(1 for pattern in tech_patterns if pattern in text)
         sales_count = sum(1 for pattern in sales_patterns if pattern in text)
         cs_count = sum(1 for pattern in cs_patterns if pattern in text)
 
-        # Determine the highest count
         counts = {
             "technical_support": tech_count,
             "sales": sales_count,
@@ -213,13 +191,11 @@ class HumanHandlingMixin:
 
         max_count = max(counts.values())
 
-        # If we have matches, return the department with the highest count
         if max_count > 0:
             for dept, count in counts.items():
                 if count == max_count:
                     return dept
 
-        # Default to customer service if no clear indicators
         return "customer_service"
 
     def _handle_human_routing(self, context, data, session_memory):
@@ -229,23 +205,18 @@ class HumanHandlingMixin:
         room_id = session_memory["routing_info"]["room"]
         routing_info = session_memory["routing_info"]
 
-        # First, determine the user's language preference
         language = routing_info.get('language')
         if not language:
             detected_language = self._extract_language(data)
             if detected_language:
                 language = detected_language
             else:
-                # Default to English if we can't detect
                 language = "English"
 
-        # Then, try to determine the department
         department = routing_info.get('department')
         if not department:
-            # Try to extract from current message
             department = self._extract_department(data)
 
-            # If not found in current message, analyze conversation history
             if not department:
                 department = self._analyze_conversation_for_department(
                     session_id)
@@ -255,10 +226,8 @@ class HumanHandlingMixin:
                 routing_info['query'] = data
                 session_memory["state"] = AgentState.COLLECTING_INFO
 
-                # Create a response asking about the department
                 response_message = f"I'll connect you with a human agent. Which department do you need? Options: Sales, Customer Service, or Technical Support."
 
-                # Update conversation history and memory
                 session_memory["chat_history"].extend(
                     [HumanMessage(content=data), AIMessage(
                         content=response_message)]
@@ -272,23 +241,19 @@ class HumanHandlingMixin:
                               "missing_info": "department"}
                 )
 
-        # Now we have both language and department, route to human
         routing_result = self._route_to_human(
             data, language, department, session_id, room_id
         )
 
-        # Update routing info and state
         routing_info['language'] = language
         routing_info['department'] = department
         routing_info['human_connected'] = True
         session_memory["state"] = AgentState.ROUTING
 
-        # Create response message
         response_message = routing_result.get(
             'message', f"Connecting you to our {department} team who speaks {language}. A representative will assist you shortly."
         )
 
-        # Update conversation history and memory
         session_memory["chat_history"].extend(
             [HumanMessage(content=data), AIMessage(content=response_message)]
         )

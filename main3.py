@@ -1,8 +1,7 @@
 import asyncio
 from dialdeskai.src.agents.config import AgentConfig
 from dialdeskai.src.runtime.runtime import AgentRuntime
-from test import EnhancedConversationalAgent
-
+from agent3 import EnhancedConversationalAgent
 
 
 async def initialize_agent():
@@ -16,7 +15,6 @@ async def initialize_agent():
 
 def main():
     """ Main function demonstrating the agent's usage """
-    # Initialize agent and connect to MCP server
     loop = asyncio.get_event_loop()
     agent = loop.run_until_complete(initialize_agent())
 
@@ -28,8 +26,6 @@ def main():
         AgentRuntime.keep_alive()
     except KeyboardInterrupt:
         print("Shutting down...")
-        loop.run_until_complete(agent.disconnect_from_mcp_server())
-
 
 if __name__ == "__main__":
     main()

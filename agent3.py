@@ -163,7 +163,7 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
             # handle_parsing_errors=True,
             max_iterations=3,
             # return_intermediate_steps=True,
-            # max_execution_time=30  # Add timeout to prevent hanging
+            # max_execution_time=30 
         )
 
         return agent_executor
@@ -183,46 +183,37 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
         try:
             current_state = session_memory["state"]
 
-            # Special handling for ROUTING and COLLECTING_INFO states
             if current_state == AgentState.ROUTING:
                 return self._handle_routing_state(context, data, session_memory)
             elif current_state == AgentState.COLLECTING_INFO:
                 return self._handle_collecting_info_state(context, data, session_memory)
 
-            # Check if we need human routing based on explicit requests
             if self._needs_human_interaction(data):
                 return self._handle_human_routing(context, data, session_memory)
 
-            # Use the agent chain directly for all tool selection and conversation handling
             chain_input = {
                 "input": data,
                 "chat_history": chat_history
             }
 
             try:
-                # Invoke the agent chain to handle tool selection
                 chain_result = await self.agent_chain.ainvoke(chain_input)
 
                 output = chain_result.get("output", "")
 
                 if isinstance(output, list) and output and hasattr(output[0], 'text'):
-                    # Extract text content from MCP tool results
                     output = "\n".join(
                         [item.text for item in output if hasattr(item, 'text')])
 
                 print(f"Agent output: {output}")
-                # Always return output wrapped in AgentOutput object
                 return AgentOutput(result=output)
 
             except Exception as context_error:
                 print(f"Error in agent chain: {str(context_error)}")
-                # Fall back to conversation chain if agent chain fails
                 try:
-                    # Prepare input for conversation chain
                     memory_system = session_memory.get("memory_system")
                     conversation_input = {"input": data}
 
-                    # Add memory components to the input
                     if memory_system:
                         if "buffer_window" in memory_system:
                             recent_vars = memory_system["buffer_window"].load_memory_variables({
@@ -242,7 +233,6 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
                             if "conversation_summary" in summary_vars:
                                 conversation_input["conversation_summary"] = summary_vars["conversation_summary"]
 
-                    # Use conversation chain as fallback
                     output = await self.conversation_chain.ainvoke(conversation_input)
 
                     if isinstance(output, list) and output and hasattr(output[0], 'text'):
@@ -253,18 +243,14 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
                     output = self._handle_context_window_exceeded(
                         session_id, data)
 
-            # Update chat history
             session_memory["chat_history"].extend(
                 [HumanMessage(content=data), AIMessage(content=output)]
             )
 
-            # Update memory with this interaction
             self._update_memory(session_id, data, output)
 
-            # Update context
             self._update_context(context, session_memory)
 
-            # Always return the result wrapped in AgentOutput
             return AgentOutput(result=output)
 
         except Exception as e:
