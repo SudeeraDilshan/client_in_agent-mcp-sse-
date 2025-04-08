@@ -51,7 +51,7 @@
 import asyncio
 from dialdeskai.src.agents.config import AgentConfig
 from dialdeskai.src.runtime.runtime import AgentRuntime
-from agent import Agent
+from agent_sse_sdk import Agent
 
 async def initialize_agent():
     """Initialize and connect the agent to the MCP server"""

@@ -1,5 +1,5 @@
 import asyncio
-from agent1 import Agent
+from agent_sse import Agent
 import traceback
 
 async def main():
