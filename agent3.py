@@ -163,7 +163,7 @@ class EnhancedConversationalAgent(BaseAgent, HumanHandlingMixin, Memory):
             # handle_parsing_errors=True,
             max_iterations=3,
             # return_intermediate_steps=True,
-            # max_execution_time=30 
+            # max_execution_time=30
         )
 
         return agent_executor

@@ -8,6 +8,7 @@ from langchain.memory import (
     ConversationTokenBufferMemory,
     CombinedMemory
 )
+from langchain_openai import ChatOpenAI
 
 class AgentState(Enum):
     AVAILABLE = "available"
@@ -21,7 +22,22 @@ class Memory:
 
         def _create_memory_system(self, session_id: str) -> Dict:
             """Create a combined memory system using different memory types."""
+            
+            self.memory_config = {
+            "max_token_limit": 4000,
+            "window_size": 5,
+            "summary_interval": 10,
+            }
+            self.llm = ChatOpenAI(
+            model="gpt-3.5-turbo",
+            temperature=0
+            )
 
+            self.summary_llm = ChatOpenAI(
+            model="gpt-3.5-turbo",
+            temperature=0.1
+            )
+            
             buffer_window_memory = ConversationBufferWindowMemory(
                 k=self.memory_config["window_size"],
                 return_messages=True,
